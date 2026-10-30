@@ -1,0 +1,6 @@
+{
+  "name": "FlexiFit",
+  "description": "Hybrid personal coaching and local Ugandan meal planning platform for urban professionals and fitness trainers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
