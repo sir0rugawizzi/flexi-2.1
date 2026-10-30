@@ -38,8 +38,11 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
+    },
+    build: {
+      chunkSizeWarningLimit: 1000,
     },
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
