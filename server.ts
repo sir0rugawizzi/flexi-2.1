@@ -4,7 +4,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +38,7 @@ async function startServer() {
     console.log('[Server] Database adapter initialized successfully');
   } catch (err) {
     console.error('[Server] Database initialization failed:', err);
+    process.exit(1);
   }
 
   // API Routes
