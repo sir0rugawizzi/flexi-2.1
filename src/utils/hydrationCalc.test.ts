@@ -5,6 +5,7 @@ import {
   calculateHydrationPercentage,
   getHydrationStatus,
   getHydrationRecommendations,
+  checkAfternoonHydrationAlert,
 } from './hydrationCalc';
 
 test('calculateHydrationTarget scales with body weight and workout day', () => {
@@ -61,3 +62,25 @@ test('getHydrationRecommendations provides time, workout, and climate-specific g
   assert.ok(foodTip);
   assert.ok(foodTip.text.includes('Pineapples') || foodTip.text.includes('Watermelon'));
 });
+
+test('checkAfternoonHydrationAlert triggers if past 2 PM and under 1.5L', () => {
+  // At 2 PM (hour 14) with only 0.75L logged -> should alert
+  const alertTriggered = checkAfternoonHydrationAlert(0.75, 14, 1.5);
+  assert.strictEqual(alertTriggered.shouldAlert, true);
+  assert.strictEqual(alertTriggered.deficitLiters, 0.75);
+  assert.ok(alertTriggered.message.includes('2:00 PM'));
+
+  // At 3 PM (hour 15) with 1.25L logged -> should alert
+  const alertAt3pm = checkAfternoonHydrationAlert(1.25, 15, 1.5);
+  assert.strictEqual(alertAt3pm.shouldAlert, true);
+  assert.strictEqual(alertAt3pm.deficitLiters, 0.25);
+
+  // At 2 PM (hour 14) with 1.75L logged (above 1.5L) -> no alert
+  const noAlertCompliant = checkAfternoonHydrationAlert(1.75, 14, 1.5);
+  assert.strictEqual(noAlertCompliant.shouldAlert, false);
+
+  // Before 2 PM (hour 11 morning) with only 0.5L -> no alert yet
+  const noAlertMorning = checkAfternoonHydrationAlert(0.5, 11, 1.5);
+  assert.strictEqual(noAlertMorning.shouldAlert, false);
+});
+

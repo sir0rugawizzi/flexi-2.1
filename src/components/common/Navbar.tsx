@@ -11,14 +11,15 @@ import {
   Camera,
   MessageSquare,
   LogOut,
-  RefreshCw,
+  ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface NavbarProps {
   currentUser: User | null;
   currentTab: string;
   onTabChange: (tab: string) => void;
-  onDemoSwitch: (targetRole: 'trainer' | 'client') => void;
+  onDemoSwitch?: (targetRole: 'trainer' | 'client') => void;
   onLogout: () => void;
 }
 
@@ -26,7 +27,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   currentTab,
   onTabChange,
-  onDemoSwitch,
   onLogout,
 }) => {
   const isTrainer = currentUser?.role === 'trainer';
@@ -186,38 +186,63 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </nav>
 
-          {/* Zone 3: Actions & Quick Switcher */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Zone 3: Actions & Verified User Identity */}
+          <div className="flex items-center gap-2.5 shrink-0">
             <PWAInstallButton />
 
-            {/* Quick Demo Role Switcher */}
-            <button
-              onClick={() => onDemoSwitch(isTrainer ? 'client' : 'trainer')}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-[#1F1F1F] hover:bg-[#2C2C2C] text-slate-200 rounded-lg border border-[#333333] transition-colors whitespace-nowrap shrink-0"
-              title={`Switch to demo as ${isTrainer ? 'Client' : 'Trainer'}`}
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-[#FF6A00]" />
-              <span className="hidden sm:inline">Demo as</span>
-              <span className="font-bold text-[#FF6A00]">{isTrainer ? 'Client' : 'Trainer'}</span>
-            </button>
+            {currentUser ? (
+              <div className="flex items-center gap-2.5 pl-2 border-l border-[#242424]">
+                {/* User Avatar Photo */}
+                <div className="relative">
+                  {currentUser.avatar_url ? (
+                    <img
+                      src={currentUser.avatar_url}
+                      alt={currentUser.name}
+                      className="w-8 h-8 rounded-full object-cover border border-[#333]"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-[#242424] border border-[#333] flex items-center justify-center font-bold text-xs text-white">
+                      {currentUser.name.charAt(0)}
+                    </div>
+                  )}
+                  {isTrainer && (
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-black flex items-center justify-center" title="Accredited Coach">
+                      <ShieldCheck className="w-2.5 h-2.5 stroke-[3]" />
+                    </div>
+                  )}
+                </div>
 
-            {currentUser && (
-              <div className="flex items-center gap-2 pl-2 border-l border-[#242424]">
-                <div className="hidden sm:flex flex-col text-right">
-                  <span className="text-xs font-bold text-white truncate max-w-[120px]">
-                    {currentUser.name}
-                  </span>
-                  <span className="text-[10px] text-slate-400 capitalize">
-                    {currentUser.role}
+                <div className="hidden sm:flex flex-col text-left">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-white truncate max-w-[120px]">
+                      {currentUser.name}
+                    </span>
+                    {isTrainer ? (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        Accredited Coach
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-[#FF6A00]/15 text-[#FF6A00]">
+                        Client
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
+                    {currentUser.email}
                   </span>
                 </div>
+
                 <button
                   onClick={onLogout}
-                  className="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-[#1C1C1C] transition-colors"
+                  className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-[#1C1C1C] transition-colors cursor-pointer"
                   title="Sign out"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">FlexiFit Secure Portal</span>
               </div>
             )}
           </div>

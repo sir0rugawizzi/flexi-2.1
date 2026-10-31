@@ -7,6 +7,7 @@ export interface User {
   name: string;
   phone: string;
   avatar_url?: string;
+  is_verified?: boolean;
   created_at: string;
 }
 
@@ -20,6 +21,13 @@ export interface TrainerProfile {
   preferred_channel: 'meet' | 'zoom' | 'whatsapp';
   monthly_rate_ugx: number;
   in_person_rate_ugx: number;
+  verification_status?: 'pending' | 'under_review' | 'verified' | 'rejected';
+  accreditation_id?: string;
+  issuing_authority?: string;
+  licence_number?: string;
+  verification_score?: number;
+  verified_at?: string;
+  documents_encrypted?: boolean;
 }
 
 export interface ClientProfile {

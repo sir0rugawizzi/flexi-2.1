@@ -30,6 +30,9 @@ import { SubscriptionModal } from './components/client/SubscriptionModal.tsx';
 import { LivePoseTracker } from './components/vision/LivePoseTracker.tsx';
 import { FormCheckUpload } from './components/vision/FormCheckUpload.tsx';
 
+// Production Auth Portal
+import { AuthPortal } from './components/auth/AuthPortal.tsx';
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -61,9 +64,6 @@ export default function App() {
       } catch (e) {
         localStorage.removeItem('flexifit_user');
       }
-    } else {
-      // Default initial preview: log in as Coach Brian (Trainer)
-      handleDemoSwitch('trainer');
     }
   }, []);
 
@@ -112,26 +112,14 @@ export default function App() {
     }
   };
 
-  const handleDemoSwitch = async (targetRole: 'trainer' | 'client') => {
-    try {
-      const res = await fetch('/api/auth/demo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: targetRole }),
-      });
-      const data = await res.json();
-      if (res.ok && data.token) {
-        localStorage.setItem('flexifit_token', data.token);
-        localStorage.setItem('flexifit_user', JSON.stringify(data.user));
-        setCurrentUser(data.user);
-        if (data.user.role === 'trainer') {
-          setActiveTab('clients');
-        } else {
-          setActiveTab('today');
-        }
-      }
-    } catch (err) {
-      console.error('Failed demo login:', err);
+  const handleAuthSuccess = (user: User, token: string) => {
+    localStorage.setItem('flexifit_token', token);
+    localStorage.setItem('flexifit_user', JSON.stringify(user));
+    setCurrentUser(user);
+    if (user.role === 'trainer') {
+      setActiveTab('clients');
+    } else {
+      setActiveTab('today');
     }
   };
 
@@ -156,12 +144,16 @@ export default function App() {
         currentUser={currentUser}
         currentTab={activeTab}
         onTabChange={(tab: string) => setActiveTab(tab)}
-        onDemoSwitch={handleDemoSwitch}
         onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+        {/* PUBLIC AUTH PORTAL WHEN LOGGED OUT */}
+        {!currentUser && (
+          <AuthPortal onAuthSuccess={handleAuthSuccess} />
+        )}
+
         {/* TRAINER VIEWS */}
         {currentUser?.role === 'trainer' && (
           <>
@@ -314,19 +306,27 @@ export default function App() {
             ? {
                 name: todayData.trainer.name,
                 phone: todayData.trainer.phone || '+256 772 123456',
+                avatar_url: todayData.trainer.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+                is_verified: todayData.trainer.is_verified ?? true,
                 profile: todayData.trainer.profile || {
                   meet_link: 'https://meet.google.com/flx-kamp-fit',
                   whatsapp_number: '+256772123456',
                   preferred_channel: 'meet',
+                  accreditation_id: 'UG-CPT-2024-UOC01',
+                  issuing_authority: 'Uganda Olympic Committee & National Fitness Accreditation Board',
                 },
               }
             : {
                 name: 'Coach Brian Mukasa',
                 phone: '+256 772 123456',
+                avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+                is_verified: true,
                 profile: {
                   meet_link: 'https://meet.google.com/flx-kamp-fit',
                   whatsapp_number: '+256772123456',
                   preferred_channel: 'meet',
+                  accreditation_id: 'UG-CPT-2024-UOC01',
+                  issuing_authority: 'Uganda Olympic Committee & National Fitness Accreditation Board',
                 },
               }
         }

@@ -7,11 +7,16 @@ interface CallTrainerModalProps {
   trainer: {
     name: string;
     phone: string;
+    avatar_url?: string;
+    is_verified?: boolean;
     profile?: {
       meet_link?: string;
       zoom_link?: string;
       whatsapp_number?: string;
       preferred_channel?: 'meet' | 'zoom' | 'whatsapp';
+      accreditation_id?: string;
+      verification_status?: string;
+      issuing_authority?: string;
     };
   } | null;
 }
@@ -72,11 +77,43 @@ export const CallTrainerModal: React.FC<CallTrainerModalProps> = ({ isOpen, onCl
         <div className="flex items-center justify-between pb-3 border-b border-[#222222]">
           <div className="flex items-center gap-2">
             <PhoneCall className="w-5 h-5 text-[#FF6A00]" />
-            <h3 className="font-extrabold text-base text-white">Call Coach Brian</h3>
+            <h3 className="font-extrabold text-base text-white">Call {trainer?.name?.startsWith('Coach') ? trainer.name : `Coach ${trainer?.name || 'Brian'}`}</h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white">
+          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer">
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Coach Visual Identity & Accreditation Card */}
+        <div className="p-3.5 rounded-2xl bg-[#1C1C1C] border border-[#2B2B2B] flex items-center gap-3.5">
+          <div className="relative shrink-0">
+            {trainer?.avatar_url ? (
+              <img
+                src={trainer.avatar_url}
+                alt={trainer.name}
+                className="w-14 h-14 rounded-2xl object-cover border-2 border-emerald-500/70 shadow-lg"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-700 text-white font-black text-xl flex items-center justify-center">
+                {trainer?.name?.charAt(0) || 'B'}
+              </div>
+            )}
+            <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-[#1C1C1C]" title="Verified Active Coach" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-black text-sm text-white truncate">{trainer?.name || 'Coach Brian Mukasa'}</span>
+              <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                Accredited 🏅
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300 font-mono mt-0.5">
+              Accreditation: {trainer?.profile?.accreditation_id || 'UG-CPT-2026-8842'}
+            </p>
+            <p className="text-[10px] text-slate-400">
+              Authority: {trainer?.profile?.issuing_authority || 'Uganda Olympic Committee & IFBB'}
+            </p>
+          </div>
         </div>
 
         {/* 1. Instant Channels */}

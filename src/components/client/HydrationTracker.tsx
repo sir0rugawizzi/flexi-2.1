@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, ClientProfile } from '../../types';
 import {
   calculateHydrationTarget,
   calculateHydrationPercentage,
   getHydrationStatus,
   getHydrationRecommendations,
+  checkAfternoonHydrationAlert,
 } from '../../utils/hydrationCalc';
 import {
   Droplets,
@@ -19,6 +20,9 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  AlertTriangle,
+  Bell,
+  X,
   CheckCircle2,
 } from 'lucide-react';
 
@@ -44,6 +48,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
   };
 
   const todayKey = `flexifit_hydration_${user.id}_${getTodayKampalaDate()}`;
+  const dismissKey = `flexifit_hydration_dismissed_${user.id}_${getTodayKampalaDate()}`;
 
   // Calculate dynamic target based on weight & workout
   const targetLiters = calculateHydrationTarget({
@@ -64,8 +69,17 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
 
   const [showAllRecs, setShowAllRecs] = useState<boolean>(false);
   const [justAddedAmount, setJustAddedAmount] = useState<number | null>(null);
+  const [isAlertDismissed, setIsAlertDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(dismissKey) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [simulate2pmMode, setSimulate2pmMode] = useState<boolean>(false);
+  const [hasNotifiedNative, setHasNotifiedNative] = useState<boolean>(false);
 
-  // Sync to localStorage
+  // Sync intake to localStorage
   useEffect(() => {
     try {
       localStorage.setItem(todayKey, currentLiters.toString());
@@ -84,13 +98,49 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
     10
   );
 
+  // Evaluate 2:00 PM alert
+  const effectiveHour = simulate2pmMode ? 14 : kampalaHour;
+  const alertCheck = checkAfternoonHydrationAlert(currentLiters, effectiveHour, 1.5);
+  const shouldShowToast = alertCheck.shouldAlert && !isAlertDismissed;
+
+  // Trigger Local Web Notification once per session when condition triggers
+  useEffect(() => {
+    if (shouldShowToast && !hasNotifiedNative && typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        try {
+          new Notification(alertCheck.shortTitle, {
+            body: alertCheck.message,
+            icon: '/favicon.ico',
+          });
+          setHasNotifiedNative(true);
+        } catch {
+          // ignore notification error in restricted contexts
+        }
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission().then((perm) => {
+          if (perm === 'granted') {
+            try {
+              new Notification(alertCheck.shortTitle, {
+                body: alertCheck.message,
+                icon: '/favicon.ico',
+              });
+              setHasNotifiedNative(true);
+            } catch {
+              // ignore
+            }
+          }
+        });
+      }
+    }
+  }, [shouldShowToast, hasNotifiedNative, alertCheck]);
+
   const percentage = calculateHydrationPercentage(currentLiters, targetLiters);
   const statusInfo = getHydrationStatus(currentLiters, targetLiters);
   const recommendations = getHydrationRecommendations(
     currentLiters,
     targetLiters,
     hasWorkoutToday,
-    kampalaHour
+    effectiveHour
   );
 
   // Progress ring geometry (Radius 44, circumference ~ 276.46)
@@ -117,7 +167,18 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
   const handleReset = () => {
     if (window.confirm("Reset today's hydration log to 0.0 L?")) {
       setCurrentLiters(0);
+      setIsAlertDismissed(false);
+      try {
+        localStorage.removeItem(dismissKey);
+      } catch {}
     }
+  };
+
+  const handleDismissAlert = () => {
+    setIsAlertDismissed(true);
+    try {
+      localStorage.setItem(dismissKey, 'true');
+    } catch {}
   };
 
   // Helper icon renderer
@@ -137,7 +198,50 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
   };
 
   return (
-    <div className="p-5 rounded-3xl bg-[#141414] border border-[#262626] relative overflow-hidden shadow-xl space-y-5">
+    <div className="p-5 rounded-3xl bg-[#141414] border border-[#262626] relative overflow-hidden shadow-xl space-y-4">
+      {/* 2:00 PM Hydration Toast / Push Banner */}
+      {shouldShowToast && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/80 via-[#22170A] to-amber-950/80 border border-amber-500/50 shadow-xl shadow-amber-950/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+              <Bell className="w-4 h-4 animate-bounce" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-white text-xs tracking-tight">
+                  {alertCheck.shortTitle}
+                </span>
+                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/30 text-amber-300">
+                  Deficit: -{alertCheck.deficitLiters}L
+                </span>
+              </div>
+              <p className="text-[11px] text-amber-200/90 leading-snug">
+                {alertCheck.message}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            <button
+              type="button"
+              onClick={() => handleAddWater(0.5)}
+              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+            >
+              <Droplets className="w-3.5 h-3.5" />
+              <span>Drink 500ml (+0.5L)</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDismissAlert}
+              className="p-1.5 text-amber-400 hover:text-white rounded-lg hover:bg-amber-900/40 transition-colors"
+              title="Dismiss alert"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-[#222222]">
         <div className="flex items-center gap-2">
@@ -160,13 +264,30 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Quick Simulation Toggle for Testing 2:00 PM Alert */}
+          <button
+            type="button"
+            onClick={() => {
+              setSimulate2pmMode(!simulate2pmMode);
+              setIsAlertDismissed(false);
+            }}
+            className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors cursor-pointer ${
+              simulate2pmMode
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/50'
+                : 'bg-[#1F1F1F] text-slate-400 border-[#2D2D2D] hover:text-white'
+            }`}
+            title="Toggle to test afternoon alert system at >=2 PM"
+          >
+            {simulate2pmMode ? '2:00 PM Active ⏱️' : '2:00 PM Alert Check'}
+          </button>
+
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusInfo.colorClass}`}>
             {statusInfo.label}
           </span>
           {currentLiters > 0 && (
             <button
               onClick={handleReset}
-              className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+              className="p-1 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
               title="Reset today's water"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -266,7 +387,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
         </div>
       </div>
 
-      {/* Quick-Add Buttons */}
+      {/* Quick-Add Buttons in Liters */}
       <div className="space-y-2">
         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
           Quick-Add Portions
@@ -342,7 +463,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
             <span className="text-xs font-bold text-white uppercase tracking-wider">
-              Coach Brian's Hydration Cues
+              Coach Brian's Hydration Blueprint
             </span>
           </div>
 
@@ -356,7 +477,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
           </button>
         </div>
 
-        {/* Primary/Dynamic Recommendation */}
+        {/* Recommendations Grid / List */}
         <div className="space-y-2">
           {(showAllRecs ? recommendations : recommendations.slice(0, 1)).map((rec) => (
             <div
@@ -379,10 +500,10 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
           ))}
         </div>
 
-        {/* Quick Ugandan Climate & Hydration Tip Footer */}
+        {/* Kampala Climate Tip Footer */}
         <div className="flex items-center gap-1.5 pt-1 text-[10px] text-slate-400">
           <Info className="w-3 h-3 text-[#FF6A00] shrink-0" />
-          <span>Kampala daytime average 26°C with 70% humidity increases unnoticeable sweat evaporation.</span>
+          <span>Kampala daytime average 26°C with 70% humidity increases unnoticeable sweat evaporation. Target at least 1.5L before 2:00 PM.</span>
         </div>
       </div>
     </div>

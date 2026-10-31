@@ -61,16 +61,32 @@ export const TodayScreen: React.FC<TodayScreenProps> = ({
     <div className="space-y-6 max-w-2xl mx-auto pb-12">
       {/* Greeting & Streak Hero Header */}
       <div className="flex items-center justify-between gap-4 pb-2">
-        <div>
-          <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">
-            {formatKampalaDate(new Date())}
-          </span>
-          <h1 className="text-2xl font-black text-white tracking-tight">
-            Mwasuze mutya, {user.name.split(' ')[0]}!
-          </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Stay consistent with today's training & indigenous nutrition.
-          </p>
+        <div className="flex items-center gap-3.5">
+          {user.avatar_url ? (
+            <div className="relative shrink-0">
+              <img
+                src={user.avatar_url}
+                alt={user.name}
+                className="w-13 h-13 rounded-2xl object-cover border-2 border-[#FF6A00]/60 shadow-lg shadow-[#FF6A00]/20"
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#0B0B0B]" title="Active Client" />
+            </div>
+          ) : (
+            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#FF6A00] to-amber-600 text-white font-black text-xl flex items-center justify-center border-2 border-[#FF6A00]/60 shrink-0 shadow-lg">
+              {user.name.charAt(0)}
+            </div>
+          )}
+          <div>
+            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">
+              {formatKampalaDate(new Date())}
+            </span>
+            <h1 className="text-2xl font-black text-white tracking-tight">
+              Mwasuze mutya, {user.name.split(' ')[0]}!
+            </h1>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Stay consistent with today's training & indigenous nutrition.
+            </p>
+          </div>
         </div>
 
         {/* Streak Flame Pill */}
@@ -257,18 +273,38 @@ export const TodayScreen: React.FC<TodayScreenProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Call Coach Modal Trigger */}
         <div className="p-4 rounded-2xl bg-[#141414] border border-[#262626] flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-950/60 border border-emerald-800/40 flex items-center justify-center text-emerald-400 shrink-0">
-              <PhoneCall className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-bold text-xs text-white">Call Coach Brian</h3>
-              <span className="text-[10px] text-slate-400">Google Meet or WhatsApp</span>
+          <div className="flex items-center gap-3 min-w-0">
+            {trainer?.avatar_url ? (
+              <div className="relative shrink-0">
+                <img
+                  src={trainer.avatar_url}
+                  alt={trainer.name}
+                  className="w-11 h-11 rounded-xl object-cover border-2 border-emerald-500/60 shadow-md"
+                />
+                <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#141414]" title="Verified Active Coach" />
+              </div>
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-emerald-950/60 border border-emerald-800/40 flex items-center justify-center text-emerald-400 shrink-0">
+                <PhoneCall className="w-5 h-5" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="font-bold text-xs text-white truncate">{trainer?.name || 'Coach Brian'}</h3>
+                {trainer?.is_verified && (
+                  <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    Accredited
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-slate-400 block truncate">
+                {trainer?.profile?.accreditation_id ? `ID: ${trainer.profile.accreditation_id}` : 'Google Meet or WhatsApp'}
+              </span>
             </div>
           </div>
           <button
             onClick={onOpenCallModal}
-            className="px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#2F2F2F] text-xs font-semibold text-slate-200 transition-colors"
+            className="px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#2F2F2F] text-xs font-semibold text-slate-200 transition-colors shrink-0"
           >
             Connect
           </button>
@@ -287,9 +323,9 @@ export const TodayScreen: React.FC<TodayScreenProps> = ({
           </div>
           <button
             onClick={onOpenSubscriptionModal}
-            className="px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#2F2F2F] text-xs font-semibold text-[#FF6A00] transition-colors"
+            className="px-3.5 py-1.5 rounded-lg bg-[#222] hover:bg-[#2F2F2F] text-xs font-semibold text-[#FF6A00] transition-colors cursor-pointer"
           >
-            Simulate
+            Manage / Pay
           </button>
         </div>
       </div>

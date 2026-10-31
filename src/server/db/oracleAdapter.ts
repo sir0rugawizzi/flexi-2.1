@@ -455,4 +455,40 @@ export class OracleAdapter implements IDataAdapter {
       body: JSON.stringify({ trainer_comment: comment }),
     });
   }
+
+  public async updateUser(id: string, updates: Partial<User>): Promise<void> {
+    await this.request(`/users/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  public async saveCoachVerification(data: {
+    userId: string;
+    verificationStatus: string;
+    accreditationId: string;
+    issuingAuthority: string;
+    licenceNumber?: string;
+    verificationScore: number;
+    otpCode: string;
+    otpExpiresAt: string;
+    documentsEncryptedJson: string;
+  }): Promise<void> {
+    await this.request(`/trainers/${encodeURIComponent(data.userId)}/verification`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public async verifyCoachOtp(userId: string, otpCode: string): Promise<boolean> {
+    try {
+      const res = await this.request<{ verified: boolean }>(`/trainers/${encodeURIComponent(userId)}/verify-otp`, {
+        method: 'POST',
+        body: JSON.stringify({ otpCode }),
+      });
+      return res.verified;
+    } catch {
+      return false;
+    }
+  }
 }

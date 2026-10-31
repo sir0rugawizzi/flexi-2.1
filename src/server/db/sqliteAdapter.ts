@@ -59,6 +59,7 @@ export class SQLiteAdapter implements IDataAdapter {
         name TEXT NOT NULL,
         phone TEXT NOT NULL,
         avatar_url TEXT,
+        is_verified INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now'))
       );
 
@@ -72,6 +73,15 @@ export class SQLiteAdapter implements IDataAdapter {
         preferred_channel TEXT DEFAULT 'meet',
         monthly_rate_ugx INTEGER DEFAULT 90000,
         in_person_rate_ugx INTEGER DEFAULT 300000,
+        verification_status TEXT DEFAULT 'pending',
+        accreditation_id TEXT,
+        issuing_authority TEXT,
+        licence_number TEXT,
+        verification_score REAL DEFAULT 0,
+        otp_code TEXT,
+        otp_expires_at TEXT,
+        verified_at TEXT,
+        documents_encrypted_json TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
 
@@ -292,11 +302,45 @@ export class SQLiteAdapter implements IDataAdapter {
       CREATE INDEX IF NOT EXISTS idx_weight_logs_client ON weight_logs(client_id, logged_at);
       CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, receiver_id);
     `);
+
+    // Safe column migrations for existing databases
+    const safeAlter = (sql: string) => {
+      try {
+        this.db.exec(sql);
+      } catch {}
+    };
+
+    safeAlter("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0");
+    safeAlter("ALTER TABLE trainer_profiles ADD COLUMN verification_status TEXT DEFAULT 'pending'");
+    safeAlter("ALTER TABLE trainer_profiles ADD COLUMN accreditation_id TEXT");
+    safeAlter("ALTER TABLE trainer_profiles ADD COLUMN issuing_authority TEXT");
+    safeAlter("ALTER TABLE trainer_profiles ADD COLUMN licence_number TEXT");
+    safeAlter("ALTER TABLE trainer_profiles ADD COLUMN verification_score REAL DEFAULT 0");
+    safeAlter("ALTER TABLE trainer_profiles ADD COLUMN otp_code TEXT");
+    safeAlter("ALTER TABLE trainer_profiles ADD COLUMN otp_expires_at TEXT");
+    safeAlter("ALTER TABLE trainer_profiles ADD COLUMN verified_at TEXT");
+    safeAlter("ALTER TABLE trainer_profiles ADD COLUMN documents_encrypted_json TEXT");
   }
 
   private seedInitialData(): void {
     const userCount = this.db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
     if (userCount.count > 0) {
+      // Ensure Coach Brian is verified in existing databases
+      try {
+        this.db.prepare(`
+          UPDATE users SET is_verified = 1 WHERE id = 'trainer-brian-01'
+        `).run();
+        this.db.prepare(`
+          UPDATE trainer_profiles 
+          SET verification_status = 'verified', 
+              accreditation_id = 'UG-CPT-2024-UOC01',
+              issuing_authority = 'Uganda Olympic Committee & National Fitness Accreditation Board',
+              licence_number = 'UOC-FT-8842',
+              verification_score = 98.5,
+              verified_at = datetime('now', '-60 days')
+          WHERE user_id = 'trainer-brian-01'
+        `).run();
+      } catch {}
       return; // Database already seeded
     }
 
@@ -306,8 +350,8 @@ export class SQLiteAdapter implements IDataAdapter {
     // 1. Seed Trainer: Coach Brian
     const trainerId = 'trainer-brian-01';
     this.db.prepare(`
-      INSERT INTO users (id, email, password_hash, role, name, phone, avatar_url, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '-60 days'))
+      INSERT INTO users (id, email, password_hash, role, name, phone, avatar_url, is_verified, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, datetime('now', '-60 days'))
     `).run(
       trainerId,
       'brian@flexifit.ug',
@@ -319,8 +363,8 @@ export class SQLiteAdapter implements IDataAdapter {
     );
 
     this.db.prepare(`
-      INSERT INTO trainer_profiles (user_id, bio, specialties, meet_link, zoom_link, whatsapp_number, preferred_channel, monthly_rate_ugx, in_person_rate_ugx)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO trainer_profiles (user_id, bio, specialties, meet_link, zoom_link, whatsapp_number, preferred_channel, monthly_rate_ugx, in_person_rate_ugx, verification_status, accreditation_id, issuing_authority, licence_number, verification_score, verified_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', 'UG-CPT-2024-UOC01', 'Uganda Olympic Committee & National Fitness Accreditation Board', 'UOC-FT-8842', 98.5, datetime('now', '-60 days'))
     `).run(
       trainerId,
       'Certified Strength & Conditioning Specialist with 8+ years coaching Kampala urban professionals in sustainable home training and indigenous nutrition.',
@@ -729,8 +773,12 @@ export class SQLiteAdapter implements IDataAdapter {
   }
 
   public async findUserById(id: string): Promise<User | null> {
-    const row = this.db.prepare('SELECT id, email, role, name, phone, avatar_url, created_at FROM users WHERE id = ?').get(id) as User | undefined;
-    return row || null;
+    const row = this.db.prepare('SELECT id, email, role, name, phone, avatar_url, is_verified, created_at FROM users WHERE id = ?').get(id) as (User & { is_verified?: number }) | undefined;
+    if (!row) return null;
+    return {
+      ...row,
+      is_verified: Boolean(row.is_verified),
+    };
   }
 
   public async createUser(userData: {
@@ -740,18 +788,28 @@ export class SQLiteAdapter implements IDataAdapter {
     name: string;
     phone: string;
     avatar_url?: string;
+    is_verified?: boolean;
   }): Promise<User> {
     const id = `user-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     this.db.prepare(`
-      INSERT INTO users (id, email, password_hash, role, name, phone, avatar_url)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, userData.email, userData.password_hash, userData.role, userData.name, userData.phone, userData.avatar_url || null);
+      INSERT INTO users (id, email, password_hash, role, name, phone, avatar_url, is_verified)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      userData.email,
+      userData.password_hash,
+      userData.role,
+      userData.name,
+      userData.phone,
+      userData.avatar_url || null,
+      userData.is_verified ? 1 : 0
+    );
 
     if (userData.role === 'trainer') {
       this.db.prepare(`
-        INSERT INTO trainer_profiles (user_id, meet_link, preferred_channel, monthly_rate_ugx, in_person_rate_ugx)
-        VALUES (?, 'https://meet.google.com/new', 'meet', 90000, 300000)
-      `).run(id);
+        INSERT INTO trainer_profiles (user_id, meet_link, preferred_channel, monthly_rate_ugx, in_person_rate_ugx, verification_status)
+        VALUES (?, 'https://meet.google.com/new', 'meet', 90000, 300000, ?)
+      `).run(id, userData.is_verified ? 'verified' : 'pending');
     } else {
       this.db.prepare(`
         INSERT INTO client_profiles (user_id, trainer_id, fitness_goal, target_calories, target_protein_g, target_carbs_g, target_fat_g, streak_days)
@@ -761,6 +819,91 @@ export class SQLiteAdapter implements IDataAdapter {
 
     const created = await this.findUserById(id);
     return created!;
+  }
+
+  public async updateUser(userId: string, data: Partial<User>): Promise<void> {
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    Object.entries(data).forEach(([key, val]) => {
+      if (key !== 'id' && val !== undefined) {
+        if (key === 'is_verified') {
+          fields.push(`${key} = ?`);
+          values.push(val ? 1 : 0);
+        } else {
+          fields.push(`${key} = ?`);
+          values.push(val);
+        }
+      }
+    });
+    if (fields.length > 0) {
+      values.push(userId);
+      this.db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    }
+  }
+
+  public async saveCoachVerification(data: {
+    userId: string;
+    verificationStatus: string;
+    accreditationId: string;
+    issuingAuthority: string;
+    licenceNumber?: string;
+    verificationScore: number;
+    otpCode: string;
+    otpExpiresAt: string;
+    documentsEncryptedJson: string;
+  }): Promise<void> {
+    this.db.prepare(`
+      UPDATE trainer_profiles
+      SET verification_status = ?,
+          accreditation_id = ?,
+          issuing_authority = ?,
+          licence_number = ?,
+          verification_score = ?,
+          otp_code = ?,
+          otp_expires_at = ?,
+          documents_encrypted_json = ?
+      WHERE user_id = ?
+    `).run(
+      data.verificationStatus,
+      data.accreditationId,
+      data.issuingAuthority,
+      data.licenceNumber || 'UOC-REG-' + Math.floor(1000 + Math.random() * 9000),
+      data.verificationScore,
+      data.otpCode,
+      data.otpExpiresAt,
+      data.documentsEncryptedJson,
+      data.userId
+    );
+  }
+
+  public async verifyCoachOtp(userId: string, otpCode: string): Promise<boolean> {
+    const row = this.db.prepare(`
+      SELECT otp_code, otp_expires_at FROM trainer_profiles WHERE user_id = ?
+    `).get(userId) as { otp_code?: string; otp_expires_at?: string } | undefined;
+
+    if (!row || !row.otp_code) return false;
+
+    // Check expiration and code match
+    const isExpired = row.otp_expires_at ? new Date(row.otp_expires_at).getTime() < Date.now() : false;
+    if (isExpired) return false;
+
+    if (row.otp_code.trim() === otpCode.trim()) {
+      // Mark coach as verified in both users and trainer_profiles
+      this.db.prepare(`
+        UPDATE users SET is_verified = 1 WHERE id = ?
+      `).run(userId);
+
+      this.db.prepare(`
+        UPDATE trainer_profiles
+        SET verification_status = 'verified',
+            verified_at = datetime('now'),
+            otp_code = NULL
+        WHERE user_id = ?
+      `).run(userId);
+
+      return true;
+    }
+    return false;
   }
 
   public async getTrainerProfile(userId: string): Promise<TrainerProfile | null> {

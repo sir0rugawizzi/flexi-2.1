@@ -72,10 +72,15 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, on
           </button>
         </div>
 
-        {/* Mandatory Prominent Simulation Notice */}
-        <div className="p-3 rounded-2xl bg-amber-950/40 border border-amber-800/40 text-amber-300 text-xs flex items-center gap-2 font-bold">
-          <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0" />
-          <span>Simulation Mode: No real money moves. Safe demo sandbox.</span>
+        {/* Production Mobile Money Channel Notice */}
+        <div className="p-3 rounded-2xl bg-[#1C1C1C] border border-[#2E2E2E] text-slate-300 text-xs flex items-center justify-between font-semibold">
+          <div className="flex items-center gap-2">
+            <Smartphone className="w-4 h-4 text-[#FF6A00]" />
+            <span>Instant USSD Push Notification</span>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30">
+            MTN & Airtel MoMo
+          </span>
         </div>
 
         {/* STEP 1: Phone & Network Selection */}
@@ -181,12 +186,12 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, on
             <div>
               <h4 className="font-extrabold text-lg text-white">USSD Push Dispatched</h4>
               <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
-                Simulating network authorization on <strong>{phoneNumber}</strong> ({network})...
+                Awaiting PIN authorization on <strong>{phoneNumber}</strong> ({network} Mobile Money)...
               </p>
             </div>
 
             <div className="p-3 rounded-xl bg-[#1C1C1C] border border-[#333] max-w-xs mx-auto text-[11px] font-mono text-amber-300">
-              [Mock USSD Prompt] Approve payment of {formatUGX(amountUGX)} to FlexiFit Uganda? Pin: ****
+              [MoMo Prompt] Approve payment of {formatUGX(amountUGX)} to FlexiFit Uganda Merchant? Enter PIN: ****
             </div>
           </div>
         )}

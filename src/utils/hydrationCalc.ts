@@ -170,3 +170,40 @@ export function getHydrationRecommendations(
 
   return recommendations;
 }
+
+export interface HydrationAlertCheck {
+  shouldAlert: boolean;
+  alertType: 'afternoon_deficit' | 'none';
+  message: string;
+  shortTitle: string;
+  deficitLiters: number;
+}
+
+/**
+ * Checks whether client is in a hydration deficit past 2:00 PM (14:00) in Kampala
+ * Target threshold: at least 1.5 liters logged by 2:00 PM
+ */
+export function checkAfternoonHydrationAlert(
+  currentLiters: number,
+  hourKampala: number = 14,
+  thresholdLiters: number = 1.5
+): HydrationAlertCheck {
+  if (hourKampala >= 14 && currentLiters < thresholdLiters) {
+    const deficit = Math.round((thresholdLiters - currentLiters) * 100) / 100;
+    return {
+      shouldAlert: true,
+      alertType: 'afternoon_deficit',
+      shortTitle: '2:00 PM Hydration Alert 💧',
+      message: `It is past 2:00 PM and you have logged ${currentLiters.toFixed(2)}L of water today. Kampala's afternoon heat requires at least ${thresholdLiters.toFixed(1)}L by 2 PM to sustain metabolic rate and muscle hydration. Drink ${deficit.toFixed(2)}L to catch up!`,
+      deficitLiters: deficit,
+    };
+  }
+  return {
+    shouldAlert: false,
+    alertType: 'none',
+    shortTitle: '',
+    message: '',
+    deficitLiters: 0,
+  };
+}
+

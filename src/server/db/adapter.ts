@@ -36,7 +36,21 @@ export interface IDataAdapter {
     name: string;
     phone: string;
     avatar_url?: string;
+    is_verified?: boolean;
   }): Promise<User>;
+  updateUser(userId: string, data: Partial<User>): Promise<void>;
+  saveCoachVerification(data: {
+    userId: string;
+    verificationStatus: string;
+    accreditationId: string;
+    issuingAuthority: string;
+    licenceNumber?: string;
+    verificationScore: number;
+    otpCode: string;
+    otpExpiresAt: string;
+    documentsEncryptedJson: string;
+  }): Promise<void>;
+  verifyCoachOtp(userId: string, otpCode: string): Promise<boolean>;
 
   // Profiles
   getTrainerProfile(userId: string): Promise<TrainerProfile | null>;

@@ -11,14 +11,16 @@ export async function getDbAdapter(): Promise<IDataAdapter> {
 
   const ordsBaseUrl = process.env.ORDS_BASE_URL?.trim();
 
+  let adapter: IDataAdapter;
   if (ordsBaseUrl) {
     console.log(`[Database] Initializing Oracle APEX / ORDS Adapter at: ${ordsBaseUrl}`);
-    adapterInstance = new OracleAdapter(ordsBaseUrl);
+    adapter = new OracleAdapter(ordsBaseUrl);
   } else {
     console.log('[Database] Initializing Local SQLite Adapter with WAL mode');
-    adapterInstance = new SQLiteAdapter();
+    adapter = new SQLiteAdapter();
   }
 
-  await adapterInstance.init();
-  return adapterInstance;
+  await adapter.init();
+  adapterInstance = adapter;
+  return adapter;
 }
