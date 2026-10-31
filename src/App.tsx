@@ -43,6 +43,7 @@ export default function App() {
   // Modals
   const [showCallModal, setShowCallModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [visionMode, setVisionMode] = useState<'live' | 'upload'>('live');
 
   // Trainer data
   const [clients, setClients] = useState<ClientOverview[]>([]);
@@ -215,6 +216,10 @@ export default function App() {
                   onOpenCallModal={() => setShowCallModal(true)}
                   onOpenSubscriptionModal={() => setShowSubscriptionModal(true)}
                   onOpenChat={() => setActiveTab('coach')}
+                  onOpenAiTracker={() => {
+                    setVisionMode('live');
+                    setActiveTab('vision');
+                  }}
                 />
               ) : (
                 <div className="flex items-center justify-center p-12 text-gray-400">
@@ -244,33 +249,52 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'pose_tracker' && (
-              <LivePoseTracker
-                onBack={() => setActiveTab('today')}
-                onSessionSaved={() => {
-                  fetchTodayData();
-                  setActiveTab('today');
-                }}
-              />
-            )}
-
-            {(activeTab === 'form_check' || activeTab === 'vision') && (
+            {(activeTab === 'vision' || activeTab === 'pose_tracker' || activeTab === 'form_check') && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between mb-2">
+                {/* Vision Mode Segmented Switcher */}
+                <div className="flex items-center justify-between pb-2 border-b border-[#222]">
+                  <div className="flex items-center p-1 bg-[#141414] border border-[#2B2B2B] rounded-2xl">
+                    <button
+                      onClick={() => setVisionMode('live')}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        visionMode === 'live'
+                          ? 'bg-[#FF6A00] text-white shadow-md shadow-[#FF6A00]/25'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>⚡ Live Camera Auto-Tracker</span>
+                    </button>
+                    <button
+                      onClick={() => setVisionMode('upload')}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        visionMode === 'upload'
+                          ? 'bg-[#FF6A00] text-white shadow-md shadow-[#FF6A00]/25'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>📁 Upload Recorded Video</span>
+                    </button>
+                  </div>
+
                   <button
                     onClick={() => setActiveTab('today')}
-                    className="text-xs text-gray-400 hover:text-white flex items-center gap-1.5 px-3 py-1.5 bg-[#181818] rounded-xl border border-[#262626] transition"
+                    className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-xl bg-[#141414] border border-[#262626] transition-colors cursor-pointer"
                   >
                     ← Back to Today
                   </button>
-                  <button
-                    onClick={() => setActiveTab('pose_tracker')}
-                    className="text-xs text-[#FF6A00] hover:underline font-semibold"
-                  >
-                    Try Live Pose Tracker (MediaPipe) →
-                  </button>
                 </div>
-                <FormCheckUpload clientId={currentUser.id} />
+
+                {visionMode === 'live' ? (
+                  <LivePoseTracker
+                    onBack={() => setActiveTab('today')}
+                    onSessionSaved={() => {
+                      fetchTodayData();
+                      setActiveTab('today');
+                    }}
+                  />
+                ) : (
+                  <FormCheckUpload clientId={currentUser.id} />
+                )}
               </div>
             )}
 

@@ -11,6 +11,7 @@ import {
   Play,
   Calendar,
   MessageSquare,
+  Camera,
 } from 'lucide-react';
 import { formatKampalaDate } from '../../utils/formatters';
 import { HydrationTracker } from './HydrationTracker';
@@ -33,6 +34,7 @@ interface TodayScreenProps {
   onOpenCallModal: () => void;
   onOpenSubscriptionModal: () => void;
   onOpenChat: () => void;
+  onOpenAiTracker?: () => void;
 }
 
 export const TodayScreen: React.FC<TodayScreenProps> = ({
@@ -49,6 +51,7 @@ export const TodayScreen: React.FC<TodayScreenProps> = ({
   onOpenCallModal,
   onOpenSubscriptionModal,
   onOpenChat,
+  onOpenAiTracker,
 }) => {
   const isWorkoutCompleted = workoutLogsToday.length > 0;
 
@@ -251,7 +254,7 @@ export const TodayScreen: React.FC<TodayScreenProps> = ({
           </p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#1C1C1C] border border-[#2B2B2B] flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-[#1C1C1C] border border-[#2B2B2B] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
           <div className="space-y-1 text-xs">
             <span className="font-bold text-slate-200 block">Day 1: Lower Body Power</span>
             <span className="text-slate-400 block">• Bodyweight Squats (4 × 15)</span>
@@ -259,13 +262,26 @@ export const TodayScreen: React.FC<TodayScreenProps> = ({
             <span className="text-slate-400 block">• Forearm Plank (3 × 45s)</span>
           </div>
 
-          <button
-            onClick={onOpenWorkoutLogger}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-[#FF6A00] hover:bg-[#E55F00] active:scale-95 text-white font-extrabold text-xs shadow-lg shadow-[#FF6A00]/20 transition-all cursor-pointer"
-          >
-            <Play className="w-4 h-4 fill-white" />
-            <span>{isWorkoutCompleted ? 'Log Extra Set' : 'Start Workout'}</span>
-          </button>
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 shrink-0">
+            {onOpenAiTracker && (
+              <button
+                onClick={onOpenAiTracker}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#141414] hover:bg-[#202020] border border-emerald-500/40 text-emerald-400 hover:text-emerald-300 font-extrabold text-xs shadow-md transition-all cursor-pointer"
+                title="Activate webcam AI to count reps and evaluate depth automatically"
+              >
+                <Camera className="w-4 h-4 text-emerald-400" />
+                <span>⚡ AI Camera Tracking</span>
+              </button>
+            )}
+
+            <button
+              onClick={onOpenWorkoutLogger}
+              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-[#FF6A00] hover:bg-[#E55F00] active:scale-95 text-white font-extrabold text-xs shadow-lg shadow-[#FF6A00]/20 transition-all cursor-pointer"
+            >
+              <Play className="w-4 h-4 fill-white" />
+              <span>{isWorkoutCompleted ? 'Log Extra Set' : 'Start Workout'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
