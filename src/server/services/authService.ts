@@ -3,7 +3,12 @@ import bcrypt from 'bcryptjs';
 import { Request, Response, NextFunction } from 'express';
 import { User, UserRole } from '../../types';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'flexifit-kampala-secret-key-production-2026';
+const JWT_SECRET =
+  process.env.JWT_SECRET ||
+  (process.env.NODE_ENV === 'production' ? '' : 'flexifit-dev-secret');
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET must be set in production');
+}
 const TOKEN_EXPIRY = '7d';
 
 export interface AuthTokenPayload {
