@@ -24,12 +24,14 @@ import {
   MapPin,
   CircleDollarSign,
 } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 interface MealPlanBuilderProps {
   onPlanCreated: () => void;
 }
 
 export const MealPlanBuilder: React.FC<MealPlanBuilderProps> = ({ onPlanCreated }) => {
+  const { showSuccess, showError, showInfo } = useToast();
   const [foods, setFoods] = useState<Food[]>([]);
   const [clients, setClients] = useState<ClientOverview[]>([]);
   const [search, setSearch] = useState('');
@@ -183,7 +185,7 @@ export const MealPlanBuilder: React.FC<MealPlanBuilderProps> = ({ onPlanCreated 
   const handleSaveMealPlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || meals.length === 0) {
-      alert('Please provide a title and at least 1 meal item.');
+      showInfo('Incomplete Meal Plan', 'Please provide a title and at least 1 meal item.');
       return;
     }
 
@@ -239,7 +241,7 @@ export const MealPlanBuilder: React.FC<MealPlanBuilderProps> = ({ onPlanCreated 
         }
       }
 
-      alert('Meal plan created and assigned successfully with Kampala market price benchmarks!');
+      showSuccess('Meal Plan Assigned', 'Meal plan created and assigned successfully with Kampala market price benchmarks!');
       setTitle('');
       setDescription('');
       setMeals([]);
@@ -247,7 +249,7 @@ export const MealPlanBuilder: React.FC<MealPlanBuilderProps> = ({ onPlanCreated 
       onPlanCreated();
     } catch (err) {
       console.error(err);
-      alert('Failed to save meal plan.');
+      showError('Failed to Save', 'Failed to save meal plan. Please try again.');
     } finally {
       setSaving(false);
     }

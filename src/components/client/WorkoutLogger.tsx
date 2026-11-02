@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Exercise, WorkoutLog } from '../../types';
 import { Dumbbell, Play, Pause, RotateCcw, Video, CheckCircle2, ChevronRight, ArrowLeft } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 interface WorkoutLoggerProps {
   onBack: () => void;
@@ -8,6 +9,7 @@ interface WorkoutLoggerProps {
 }
 
 export const WorkoutLogger: React.FC<WorkoutLoggerProps> = ({ onBack, onWorkoutLogged }) => {
+  const { showSuccess, showError, showInfo } = useToast();
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
 
@@ -125,7 +127,7 @@ export const WorkoutLogger: React.FC<WorkoutLoggerProps> = ({ onBack, onWorkoutL
     if (!selectedExercise) return;
     const completedSets = sets.filter((s) => s.completed);
     if (completedSets.length === 0) {
-      alert('Please check off at least 1 completed set before saving.');
+      showInfo('Incomplete Set', 'Please check off at least 1 completed set before saving.');
       return;
     }
 
@@ -154,12 +156,15 @@ export const WorkoutLogger: React.FC<WorkoutLoggerProps> = ({ onBack, onWorkoutL
       });
 
       if (res.ok) {
-        alert(`Workout logged: ${completedSets.length} sets of ${selectedExercise.name}! Streak incremented.`);
+        showSuccess(
+          'Workout Logged',
+          `Completed ${completedSets.length} sets of ${selectedExercise.name}! Daily workout consistency milestone updated.`
+        );
         onWorkoutLogged();
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to log workout');
+      showError('Failed to log workout', 'Please check your connection and try again.');
     } finally {
       setSubmitting(false);
     }

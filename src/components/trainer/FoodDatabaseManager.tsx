@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Food } from '../../types';
 import { Search, Plus, Utensils, Globe, Sparkles, Check } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 export const FoodDatabaseManager: React.FC = () => {
+  const { showSuccess, showError } = useToast();
   const [foods, setFoods] = useState<Food[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string>('all');
@@ -57,13 +59,13 @@ export const FoodDatabaseManager: React.FC = () => {
       });
 
       if (res.ok) {
-        alert('Custom food added to database successfully!');
+        showSuccess('Food Added', 'Custom food added to database successfully!');
         setShowAddModal(false);
         fetchFoods();
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to add food');
+      showError('Addition Failed', 'Failed to add custom food. Please try again.');
     }
   };
 
@@ -107,7 +109,7 @@ export const FoodDatabaseManager: React.FC = () => {
       });
 
       if (res.ok) {
-        alert(`Added "${item.name}" to your local food database!`);
+        showSuccess('Imported Food Added', `Added "${item.name}" to your local food database!`);
         fetchFoods();
       }
     } catch (err) {

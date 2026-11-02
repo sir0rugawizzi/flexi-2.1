@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Exercise, WorkoutPlan, ClientOverview } from '../../types';
 import { Dumbbell, Plus, Trash2, CheckCircle2, UserCheck, Video } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 interface WorkoutBuilderProps {
   onPlanCreated: () => void;
 }
 
 export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({ onPlanCreated }) => {
+  const { showSuccess, showError, showInfo } = useToast();
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [clients, setClients] = useState<ClientOverview[]>([]);
   const [existingPlans, setExistingPlans] = useState<WorkoutPlan[]>([]);
@@ -116,7 +118,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({ onPlanCreated })
   const handleSaveWorkoutPlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      alert('Please enter a title for the workout plan.');
+      showInfo('Title Required', 'Please enter a title for the workout plan.');
       return;
     }
 
@@ -158,14 +160,14 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({ onPlanCreated })
         }
       }
 
-      alert('Workout Plan successfully created and assigned!');
+      showSuccess('Workout Plan Created', 'Workout Plan successfully created and assigned to selected clients!');
       setTitle('');
       setDescription('');
       setSelectedClientIds([]);
       onPlanCreated();
     } catch (err) {
       console.error(err);
-      alert('Failed to save workout plan.');
+      showError('Failed to Save', 'Failed to save workout plan. Please try again.');
     } finally {
       setSaving(false);
     }

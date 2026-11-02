@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Food } from '../../types';
 import { scaleFoodNutrients } from '../../utils/macroCalc';
 import { ArrowLeft, Search, Plus, UtensilsCrossed, CheckCircle2 } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 interface MealLoggerProps {
   onBack: () => void;
@@ -9,6 +10,7 @@ interface MealLoggerProps {
 }
 
 export const MealLogger: React.FC<MealLoggerProps> = ({ onBack, onMealLogged }) => {
+  const { showSuccess, showError } = useToast();
   const [foods, setFoods] = useState<Food[]>([]);
   const [search, setSearch] = useState('');
   const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
@@ -62,12 +64,15 @@ export const MealLogger: React.FC<MealLoggerProps> = ({ onBack, onMealLogged }) 
       });
 
       if (res.ok) {
-        alert(`Logged ${portionGrams}g of ${selectedFood.name} (${scaledNutrients.calories} kcal) for ${mealType}!`);
+        showSuccess(
+          'Meal Logged',
+          `Logged ${portionGrams}g of ${selectedFood.name} (${scaledNutrients.calories} kcal) for ${mealType}!`
+        );
         onMealLogged();
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to log meal');
+      showError('Failed to log meal', 'Please check your connection and try again.');
     } finally {
       setSubmitting(false);
     }

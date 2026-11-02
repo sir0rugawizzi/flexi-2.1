@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { User, ClientOverview } from './types/index.ts';
 import { Navbar } from './components/common/Navbar.tsx';
 import { OfflineBanner } from './components/common/OfflineBanner.tsx';
+import { ToastProvider } from './context/ToastContext.tsx';
+import { ToastContainer } from './components/common/ToastContainer.tsx';
 
 // Trainer views
 import { ClientList } from './components/trainer/ClientList.tsx';
@@ -136,9 +138,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0B0B] text-gray-100 flex flex-col font-sans selection:bg-[#FF6A00] selection:text-black">
-      {/* Offline Status */}
-      <OfflineBanner />
+    <ToastProvider>
+      <div className="min-h-screen bg-[#0B0B0B] text-gray-100 flex flex-col font-sans selection:bg-[#FF6A00] selection:text-black">
+        {/* Offline Status */}
+        <OfflineBanner />
 
       {/* Top Navigation */}
       <Navbar
@@ -364,6 +367,10 @@ export default function App() {
           fetchTodayData();
         }}
       />
+
+      {/* Global Floating Toast Notifications (Subtle & Non-blocking) */}
+      <ToastContainer />
     </div>
+    </ToastProvider>
   );
 }

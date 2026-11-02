@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { formatKampalaDate } from '../../utils/formatters';
 import { LineChart as LineChartIcon, Plus, Scale, Dumbbell, UtensilsCrossed } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 export const ProgressCharts: React.FC = () => {
+  const { showSuccess, showError } = useToast();
   const [data, setData] = useState<{
     targetWeightKg: number;
     currentWeightKg: number;
@@ -67,7 +69,7 @@ export const ProgressCharts: React.FC = () => {
       });
 
       if (res.ok) {
-        alert('Weight logged successfully!');
+        showSuccess('Weight Logged', `${parseFloat(newWeight)} kg recorded successfully. Charts updated!`);
         setNewWeight('');
         setWeightNotes('');
         setShowLogModal(false);
@@ -75,7 +77,7 @@ export const ProgressCharts: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to log weight');
+      showError('Logging Failed', 'Failed to log weight. Please try again.');
     } finally {
       setSubmittingWeight(false);
     }

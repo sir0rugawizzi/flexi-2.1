@@ -19,7 +19,6 @@ interface NavbarProps {
   currentUser: User | null;
   currentTab: string;
   onTabChange: (tab: string) => void;
-  onDemoSwitch?: (targetRole: 'trainer' | 'client') => void;
   onLogout: () => void;
 }
 

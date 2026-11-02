@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { CheckIn } from '../../types';
 import { Calendar, CheckCircle2, Clock } from 'lucide-react';
 import { formatKampalaDateTime } from '../../utils/formatters';
+import { useToast } from '../../context/ToastContext';
 
 export const WeeklyCheckIn: React.FC = () => {
+  const { showSuccess, showError } = useToast();
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
   const [energy, setEnergy] = useState(8);
@@ -53,13 +55,13 @@ export const WeeklyCheckIn: React.FC = () => {
       });
 
       if (res.ok) {
-        alert('Weekly accountability check-in submitted! Coach Brian has been notified.');
+        showSuccess('Check-In Submitted', 'Weekly accountability check-in recorded! Coach Brian has been notified.');
         setNotes('');
         fetchCheckIns();
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to submit check-in');
+      showError('Submission Failed', 'Failed to submit check-in. Please try again.');
     } finally {
       setSubmitting(false);
     }

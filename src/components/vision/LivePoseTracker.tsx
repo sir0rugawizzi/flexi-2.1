@@ -16,7 +16,16 @@ import {
   Target,
   Sparkles,
   Zap,
+  Headphones,
+  Music2,
+  Sliders,
 } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
+import {
+  focusAudio,
+  SOUNDSCAPE_TRACKS,
+  SoundscapeId,
+} from '../../utils/focusAudioEngine';
 import {
   calculateJointAngle,
   analyzeSquatForm,
@@ -37,6 +46,7 @@ interface LivePoseTrackerProps {
 }
 
 export const LivePoseTracker: React.FC<LivePoseTrackerProps> = ({ onBack, onSessionSaved }) => {
+  const { showError, showSuccess, showInfo } = useToast();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -46,6 +56,13 @@ export const LivePoseTracker: React.FC<LivePoseTrackerProps> = ({ onBack, onSess
   const [modelLoading, setModelLoading] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+
+  // Interactive Focus Mode & Generative Soundscapes
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [activeSoundscape, setActiveSoundscape] = useState<SoundscapeId>('uganda_baximba');
+  const [soundscapeVolume, setSoundscapeVolume] = useState(0.65);
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const [currentBeat, setCurrentBeat] = useState(0);
 
   // Interactive Engagement Features
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
@@ -229,18 +246,57 @@ export const LivePoseTracker: React.FC<LivePoseTrackerProps> = ({ onBack, onSess
     }
   };
 
-  // IMMEDIATE CAMERA ACTIVATION ON MOUNT
+  // IMMEDIATE CAMERA ACTIVATION & FOCUS AUDIO LIFECYCLE
   useEffect(() => {
     initPoseLandmarker();
     startCamera(); // Camera activates immediately on mount!
 
+    const unsubscribeBeat = focusAudio.onBeat((beat) => {
+      setCurrentBeat(beat);
+    });
+
     return () => {
       stopCamera();
+      focusAudio.stop();
+      unsubscribeBeat();
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
     };
   }, []);
+
+  const toggleFocusMode = async () => {
+    if (!isFocusMode) {
+      setIsFocusMode(true);
+      await focusAudio.start(activeSoundscape);
+      showInfo(`🎧 Focus Mode Active: ${SOUNDSCAPE_TRACKS[activeSoundscape].title} streaming`);
+    } else {
+      setIsFocusMode(false);
+      focusAudio.stop();
+      showInfo('Focus Mode paused');
+    }
+  };
+
+  const handleSelectSoundscape = async (id: SoundscapeId) => {
+    setActiveSoundscape(id);
+    if (!isFocusMode) {
+      setIsFocusMode(true);
+      await focusAudio.start(id);
+      showInfo(`🎧 Switched to ${SOUNDSCAPE_TRACKS[id].title}`);
+    } else {
+      focusAudio.setTrack(id);
+    }
+  };
+
+  const handleVolumeChange = (vol: number) => {
+    setSoundscapeVolume(vol);
+    focusAudio.setVolume(vol);
+  };
+
+  const handleToggleMute = () => {
+    const nextMute = focusAudio.toggleMute();
+    setIsAudioMuted(nextMute);
+  };
 
   // Draw colored kinematic skeleton
   const drawSkeleton = (ctx: CanvasRenderingContext2D, landmarks: any[], width: number, height: number) => {
@@ -420,7 +476,7 @@ export const LivePoseTracker: React.FC<LivePoseTrackerProps> = ({ onBack, onSess
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to save session');
+      showError('Save Failed', 'Failed to save workout session. Please try again.');
     }
   };
 
@@ -468,8 +524,25 @@ export const LivePoseTracker: React.FC<LivePoseTrackerProps> = ({ onBack, onSess
           <span>Back to Today</span>
         </button>
 
-        {/* Action Toggles: Mute/Unmute Voice, Flip Camera, Ghost Guide */}
+        {/* Action Toggles: Focus Mode, Mute/Unmute Voice, Flip Camera, Ghost Guide */}
         <div className="flex items-center gap-2">
+          {/* Focus Mode Soundscape Toggle */}
+          <button
+            onClick={toggleFocusMode}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+              isFocusMode
+                ? 'bg-[#FF6A00]/15 border-[#FF6A00] text-[#FF6A00] shadow-md shadow-[#FF6A00]/15'
+                : 'bg-[#141414] border-[#222] text-slate-400 hover:text-white hover:border-[#333]'
+            }`}
+            title="Focus Mode: Ugandan Polyrhythms & Atmospheric Soundscapes"
+          >
+            <Headphones className={`w-3.5 h-3.5 ${isFocusMode ? 'animate-pulse text-[#FF6A00]' : ''}`} />
+            <span className="text-[11px]">{isFocusMode ? 'Focus: ON' : 'Focus Mode'}</span>
+            {isFocusMode && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            )}
+          </button>
+
           <button
             onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
             className={`p-2 rounded-xl text-xs font-semibold border transition-colors flex items-center gap-1 cursor-pointer ${
@@ -480,7 +553,7 @@ export const LivePoseTracker: React.FC<LivePoseTrackerProps> = ({ onBack, onSess
             title={isVoiceEnabled ? 'Voice Coach Active' : 'Voice Coach Muted'}
           >
             {isVoiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            <span className="text-[10px] hidden sm:inline">{isVoiceEnabled ? 'Voice On' : 'Muted'}</span>
+            <span className="text-[10px] hidden sm:inline">{isVoiceEnabled ? 'Voice' : 'Muted'}</span>
           </button>
 
           <button
@@ -590,8 +663,116 @@ export const LivePoseTracker: React.FC<LivePoseTrackerProps> = ({ onBack, onSess
         </div>
       </div>
 
+      {/* Atmospheric Soundscapes Dock (Focus Mode Active or Expandable) */}
+      <div className={`p-3.5 rounded-2xl border transition-all ${
+        isFocusMode
+          ? 'bg-[#16120D] border-[#FF6A00]/50 shadow-lg shadow-[#FF6A00]/10'
+          : 'bg-[#141414] border-[#222]'
+      }`}>
+        <div className="flex items-center justify-between gap-3 mb-2.5">
+          <div className="flex items-center gap-2">
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+              isFocusMode ? 'bg-[#FF6A00] text-black shadow-sm' : 'bg-[#222] text-slate-400'
+            }`}>
+              <Music2 className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white">Focus Soundscape Engine</span>
+                {isFocusMode && (
+                  <span className="text-[10px] font-mono text-[#FF6A00] font-bold">
+                    {SOUNDSCAPE_TRACKS[activeSoundscape].bpm} BPM
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-400">
+                {isFocusMode
+                  ? SOUNDSCAPE_TRACKS[activeSoundscape].subtitle
+                  : 'Synthesized offline Ugandan beats & lo-fi ambience for workout motivation'}
+              </p>
+            </div>
+          </div>
+
+          {/* Equalizer Visualizer Bars */}
+          {isFocusMode && (
+            <div className="flex items-end gap-1 h-5 px-2 py-1 rounded-lg bg-black/40 border border-[#333]">
+              {[0.4, 0.9, 0.6, 1.0].map((baseScale, idx) => {
+                const isActive = (currentBeat + idx) % 4 === 0;
+                const heightPercent = isActive ? 100 : Math.round(baseScale * 60);
+                return (
+                  <div
+                    key={idx}
+                    className="w-1 bg-[#FF6A00] rounded-full transition-all duration-100"
+                    style={{ height: `${heightPercent}%` }}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Soundscape Track Selector Pills */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {(Object.values(SOUNDSCAPE_TRACKS) as typeof SOUNDSCAPE_TRACKS[SoundscapeId][]).map((t) => {
+            const isSelected = activeSoundscape === t.id && isFocusMode;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => handleSelectSoundscape(t.id)}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2 ${
+                  isSelected
+                    ? 'bg-[#241A0E] border-[#FF6A00] text-white'
+                    : 'bg-[#1A1A1A] border-[#2A2A2A] text-slate-400 hover:text-white hover:bg-[#202020]'
+                }`}
+              >
+                <span className="text-lg select-none">{t.icon}</span>
+                <div className="overflow-hidden">
+                  <div className="text-xs font-bold truncate">{t.title}</div>
+                  <div className="text-[10px] text-slate-500 truncate">{t.genre} · {t.bpm} BPM</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Volume & Mute Controls when Focus Mode is Active */}
+        {isFocusMode && (
+          <div className="mt-3 pt-2.5 border-t border-[#292218] flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-slate-300">
+              <button
+                onClick={handleToggleMute}
+                className="p-1 rounded text-slate-400 hover:text-white cursor-pointer"
+                title={isAudioMuted ? 'Unmute Soundscape' : 'Mute Soundscape'}
+              >
+                {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+              </button>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {isAudioMuted ? 'MUTED' : `${Math.round(soundscapeVolume * 100)}% VOL`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 flex-1 max-w-[140px]">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={isAudioMuted ? 0 : soundscapeVolume}
+                onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                className="w-full accent-[#FF6A00] h-1.5 bg-[#2A2A2A] rounded-lg cursor-pointer"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Live Camera Viewport & Silhouette Guide */}
-      <div className="relative rounded-3xl bg-black border border-[#2B2B2B] overflow-hidden aspect-[4/3] flex items-center justify-center shadow-2xl">
+      <div className={`relative rounded-3xl bg-black overflow-hidden aspect-[4/3] flex items-center justify-center shadow-2xl transition-all ${
+        isFocusMode
+          ? 'border-2 border-[#FF6A00]/60 shadow-[0_0_35px_rgba(255,106,0,0.25)]'
+          : 'border border-[#2B2B2B]'
+      }`}>
         <video
           ref={videoRef}
           playsInline

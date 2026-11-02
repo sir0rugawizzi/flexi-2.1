@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PhoneCall, Video, MessageCircle, X, Send, Calendar, CheckCircle2 } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 interface CallTrainerModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ interface CallTrainerModalProps {
 }
 
 export const CallTrainerModal: React.FC<CallTrainerModalProps> = ({ isOpen, onClose, trainer }) => {
+  const { showError } = useToast();
   const [preferredSlot, setPreferredSlot] = useState('Today (6:00 PM)');
   const [topic, setTopic] = useState('Form Check & Nutrition Adjustment');
   const [selectedChannel, setSelectedChannel] = useState<'meet' | 'zoom' | 'whatsapp'>('meet');
@@ -65,7 +67,7 @@ export const CallTrainerModal: React.FC<CallTrainerModalProps> = ({ isOpen, onCl
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to send call request');
+      showError('Request Failed', 'Failed to send call request. Please try again.');
     } finally {
       setSubmitting(false);
     }

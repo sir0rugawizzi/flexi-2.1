@@ -342,3 +342,22 @@ export interface ClientOverview {
   active_workout_plan?: WorkoutPlan;
   active_meal_plan?: MealPlan;
 }
+
+export type MilestoneCategory = 'hydration' | 'workout' | 'streak' | 'nutrition' | 'kinematics';
+
+export interface MilestoneBadge {
+  id: string;
+  category: MilestoneCategory;
+  title: string;
+  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  description: string;
+  criteria: string;
+  iconName: string;
+  accentColor: string;
+  currentValue: number;
+  targetValue: number;
+  unit: string;
+  isUnlocked: boolean;
+  unlockedAt?: string;
+}
+

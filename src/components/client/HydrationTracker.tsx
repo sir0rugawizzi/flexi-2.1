@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User, ClientProfile } from '../../types';
 import {
   calculateHydrationTarget,
@@ -7,6 +7,15 @@ import {
   getHydrationRecommendations,
   checkAfternoonHydrationAlert,
 } from '../../utils/hydrationCalc';
+import {
+  evaluateHydrationSchedule,
+  isReminderDueByInterval,
+  requestPushNotificationPermission,
+  dispatchNativePushNotification,
+  DEFAULT_HYDRATION_SETTINGS,
+  HydrationReminderSettings,
+} from '../../utils/hydrationReminderEngine';
+import { useToast } from '../../context/ToastContext';
 import {
   Droplets,
   Plus,
@@ -24,19 +33,26 @@ import {
   Bell,
   X,
   CheckCircle2,
+  Clock,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 interface HydrationTrackerProps {
   user: User;
   profile: ClientProfile;
   hasWorkoutToday: boolean;
+  onWaterUpdated?: (liters: number) => void;
 }
 
 export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
   user,
   profile,
   hasWorkoutToday,
+  onWaterUpdated,
 }) => {
+  const { showSuccess, showInfo, showHydrationReminder } = useToast();
+
   // Get today's date string in YYYY-MM-DD for Africa/Kampala
   const getTodayKampalaDate = () => {
     return new Intl.DateTimeFormat('en-CA', {
@@ -49,6 +65,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
 
   const todayKey = `flexifit_hydration_${user.id}_${getTodayKampalaDate()}`;
   const dismissKey = `flexifit_hydration_dismissed_${user.id}_${getTodayKampalaDate()}`;
+  const settingsKey = `flexifit_hydration_settings_${user.id}`;
 
   // Calculate dynamic target based on weight & workout
   const targetLiters = calculateHydrationTarget({
@@ -67,7 +84,19 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
     }
   });
 
+  // Reminder settings state
+  const [reminderSettings, setReminderSettings] = useState<HydrationReminderSettings>(() => {
+    try {
+      const saved = localStorage.getItem(settingsKey);
+      return saved ? { ...DEFAULT_HYDRATION_SETTINGS, ...JSON.parse(saved) } : DEFAULT_HYDRATION_SETTINGS;
+    } catch {
+      return DEFAULT_HYDRATION_SETTINGS;
+    }
+  });
+
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [showAllRecs, setShowAllRecs] = useState<boolean>(false);
+  const [showSettingsPanel, setShowSettingsPanel] = useState<boolean>(false);
   const [justAddedAmount, setJustAddedAmount] = useState<number | null>(null);
   const [isAlertDismissed, setIsAlertDismissed] = useState<boolean>(() => {
     try {
@@ -79,14 +108,33 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
   const [simulate2pmMode, setSimulate2pmMode] = useState<boolean>(false);
   const [hasNotifiedNative, setHasNotifiedNative] = useState<boolean>(false);
 
-  // Sync intake to localStorage
+  // Check initial push permission
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPushPermission(Notification.permission);
+    } else {
+      setPushPermission('unsupported');
+    }
+  }, []);
+
+  // Save settings when changed
+  useEffect(() => {
+    try {
+      localStorage.setItem(settingsKey, JSON.stringify(reminderSettings));
+    } catch (e) {
+      console.error('Failed to save hydration reminder settings:', e);
+    }
+  }, [reminderSettings, settingsKey]);
+
+  // Sync intake to localStorage and notify parent
   useEffect(() => {
     try {
       localStorage.setItem(todayKey, currentLiters.toString());
+      onWaterUpdated?.(currentLiters);
     } catch (e) {
       console.error('Failed to save hydration log:', e);
     }
-  }, [currentLiters, todayKey]);
+  }, [currentLiters, todayKey, onWaterUpdated]);
 
   // Current hour in Kampala
   const kampalaHour = parseInt(
@@ -103,33 +151,86 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
   const alertCheck = checkAfternoonHydrationAlert(currentLiters, effectiveHour, 1.5);
   const shouldShowToast = alertCheck.shouldAlert && !isAlertDismissed;
 
-  // Trigger Local Web Notification once per session when condition triggers
+  // Add water handler
+  const handleAddWater = useCallback(
+    (litersToAdd: number) => {
+      let nextVal = 0;
+      setCurrentLiters((prev) => {
+        const updated = Math.round((prev + litersToAdd) * 100) / 100;
+        nextVal = Math.min(8.0, Math.max(0, updated));
+        return nextVal;
+      });
+      setJustAddedAmount(litersToAdd);
+      setTimeout(() => setJustAddedAmount(null), 1500);
+
+      // Invoke toast notification asynchronously outside the setState execution cycle
+      setTimeout(() => {
+        const pct = Math.min(100, Math.round((nextVal / targetLiters) * 100));
+        showSuccess(
+          'Hydration Logged',
+          `+${litersToAdd}L recorded • Current: ${nextVal.toFixed(2)}L / ${targetLiters.toFixed(1)}L (${pct}%)`,
+          3500
+        );
+      }, 0);
+    },
+    [targetLiters, showSuccess]
+  );
+
+  // Trigger push and subtle toast notification function
+  const triggerHydrationAlert = useCallback(
+    (customTitle?: string, customMessage?: string) => {
+      const evaluation = evaluateHydrationSchedule(currentLiters, targetLiters, new Date());
+      const title = customTitle || evaluation.title;
+      const message = customMessage || evaluation.message;
+
+      // 1. Dispatch native browser push notification if permitted
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        dispatchNativePushNotification(title, message);
+      }
+
+      // 2. Trigger subtle floating in-app toast with quick-add actions
+      showHydrationReminder({
+        currentLiters,
+        targetLiters,
+        timeSlot: evaluation.slot,
+        tip: evaluation.tip,
+        onQuickAdd: (amount) => handleAddWater(amount),
+      });
+
+      // Update last reminder timestamp
+      setReminderSettings((prev) => ({
+        ...prev,
+        lastReminderTimestamp: Date.now(),
+      }));
+    },
+    [currentLiters, targetLiters, showHydrationReminder, handleAddWater]
+  );
+
+  // Background Reminder Loop (evaluates schedule and interval every 60 seconds)
+  useEffect(() => {
+    if (!reminderSettings.enabled) return;
+
+    const intervalTimer = setInterval(() => {
+      const now = Date.now();
+      const isDue = isReminderDueByInterval(reminderSettings, now);
+
+      if (isDue) {
+        const schedule = evaluateHydrationSchedule(currentLiters, targetLiters, new Date());
+        if (schedule.shouldRemind) {
+          triggerHydrationAlert();
+        }
+      }
+    }, 60000);
+
+    return () => clearInterval(intervalTimer);
+  }, [reminderSettings, currentLiters, targetLiters, triggerHydrationAlert]);
+
+  // Native notification check for 2 PM threshold once per session
   useEffect(() => {
     if (shouldShowToast && !hasNotifiedNative && typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'granted') {
-        try {
-          new Notification(alertCheck.shortTitle, {
-            body: alertCheck.message,
-            icon: '/favicon.ico',
-          });
-          setHasNotifiedNative(true);
-        } catch {
-          // ignore notification error in restricted contexts
-        }
-      } else if (Notification.permission === 'default') {
-        Notification.requestPermission().then((perm) => {
-          if (perm === 'granted') {
-            try {
-              new Notification(alertCheck.shortTitle, {
-                body: alertCheck.message,
-                icon: '/favicon.ico',
-              });
-              setHasNotifiedNative(true);
-            } catch {
-              // ignore
-            }
-          }
-        });
+        dispatchNativePushNotification(alertCheck.shortTitle, alertCheck.message);
+        setHasNotifiedNative(true);
       }
     }
   }, [shouldShowToast, hasNotifiedNative, alertCheck]);
@@ -140,22 +241,12 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
     currentLiters,
     targetLiters,
     hasWorkoutToday,
-    effectiveHour
+    kampalaHour
   );
 
-  // Progress ring geometry (Radius 44, circumference ~ 276.46)
   const radius = 44;
   const circumference = 2 * Math.PI * radius;
   const strokeOffset = circumference - (Math.min(100, percentage) / 100) * circumference;
-
-  const handleAddWater = (litersToAdd: number) => {
-    setCurrentLiters((prev) => {
-      const updated = Math.round((prev + litersToAdd) * 100) / 100;
-      return Math.min(8.0, Math.max(0, updated));
-    });
-    setJustAddedAmount(litersToAdd);
-    setTimeout(() => setJustAddedAmount(null), 1500);
-  };
 
   const handleSubtractWater = (litersToSubtract: number) => {
     setCurrentLiters((prev) => {
@@ -165,13 +256,12 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
   };
 
   const handleReset = () => {
-    if (window.confirm("Reset today's hydration log to 0.0 L?")) {
-      setCurrentLiters(0);
-      setIsAlertDismissed(false);
-      try {
-        localStorage.removeItem(dismissKey);
-      } catch {}
-    }
+    setCurrentLiters(0);
+    setIsAlertDismissed(false);
+    try {
+      localStorage.removeItem(dismissKey);
+    } catch {}
+    showInfo("Hydration Reset", "Today's hydration log has been reset to 0.0 L.");
   };
 
   const handleDismissAlert = () => {
@@ -179,6 +269,28 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
     try {
       localStorage.setItem(dismissKey, 'true');
     } catch {}
+  };
+
+  const handleEnablePushNotifications = async () => {
+    const result = await requestPushNotificationPermission();
+    setPushPermission(result);
+    if (result === 'granted') {
+      showSuccess(
+        'Push Notifications Active',
+        'You will now receive gentle hydration reminders throughout the day.',
+        4000
+      );
+      dispatchNativePushNotification(
+        'FlexiFit Hydration Enabled',
+        'Gentle tropical reminders calibrated for Kampala weather are active.'
+      );
+    } else if (result === 'denied') {
+      showInfo(
+        'Push Notifications Blocked',
+        'Browser permissions are blocked. In-app subtle toast notifications will still alert you reliably.',
+        5000
+      );
+    }
   };
 
   // Helper icon renderer
@@ -233,7 +345,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
             <button
               type="button"
               onClick={handleDismissAlert}
-              className="p-1.5 text-amber-400 hover:text-white rounded-lg hover:bg-amber-900/40 transition-colors"
+              className="p-1.5 text-amber-400 hover:text-white rounded-lg hover:bg-amber-900/40 transition-colors cursor-pointer"
               title="Dismiss alert"
             >
               <X className="w-4 h-4" />
@@ -316,63 +428,65 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
               strokeWidth="9"
               fill="none"
             />
-            {/* Animated Cyan Fill Ring */}
+            {/* Animated Dynamic Progress Ring */}
             <circle
               cx="72"
               cy="72"
               r={radius}
               stroke="url(#hydrationGradient)"
               strokeWidth="9"
+              fill="none"
               strokeDasharray={circumference}
               strokeDashoffset={strokeOffset}
               strokeLinecap="round"
-              fill="none"
               className="transition-all duration-700 ease-out"
             />
           </svg>
 
-          {/* Inner Content */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
-            <span className="text-2xl font-black text-white font-mono leading-none tracking-tight">
-              {currentLiters.toFixed(2)}
-              <span className="text-xs font-semibold text-cyan-400 ml-0.5">L</span>
-            </span>
-            <span className="text-[10px] text-slate-400 font-medium mt-1">
+          {/* Center Metric Display */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+            <div className="flex items-baseline gap-0.5">
+              <span className="text-2xl font-black tracking-tight text-white font-mono tabular-nums">
+                {currentLiters.toFixed(2)}
+              </span>
+              <span className="text-xs font-semibold text-cyan-400">L</span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-mono">
               of {targetLiters.toFixed(1)} L goal
             </span>
-            <span className="text-[10px] font-bold text-cyan-400 font-mono mt-0.5">
+            <span className="text-xs font-bold text-cyan-300 mt-0.5 font-mono">
               {percentage}%
             </span>
-          </div>
 
-          {/* Subtle Flash Animation when water is logged */}
-          {justAddedAmount && (
-            <div className="absolute -top-1 -right-1 px-2 py-0.5 rounded-full bg-cyan-500 text-black font-extrabold text-[10px] shadow-lg shadow-cyan-500/50 animate-bounce">
-              +{justAddedAmount}L
-            </div>
-          )}
+            {/* Quick Added Floating Badge */}
+            {justAddedAmount && (
+              <span className="absolute -top-1 px-2 py-0.5 rounded-full bg-cyan-500 text-black text-[10px] font-extrabold animate-bounce shadow-lg">
+                +{justAddedAmount} L
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Quick Summary & Remaining Volume */}
-        <div className="w-full sm:w-auto flex-1 space-y-3">
-          <div className="grid grid-cols-2 gap-2 text-center">
-            <div className="p-2.5 rounded-2xl bg-[#1C1C1C] border border-[#282828]">
-              <span className="text-[9px] uppercase font-bold text-slate-400 block">Remaining</span>
-              <span className="text-sm font-extrabold font-mono text-white">
-                {Math.max(0, Math.round((targetLiters - currentLiters) * 100) / 100).toFixed(2)} L
+        {/* Breakdown Stats */}
+        <div className="flex-1 space-y-3 w-full">
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="p-2.5 rounded-2xl bg-[#1A1A1A] border border-[#262626]">
+              <span className="text-[10px] text-slate-400 block font-medium">Remaining</span>
+              <span className="text-base font-bold text-white font-mono tabular-nums">
+                {Math.max(0, targetLiters - currentLiters).toFixed(2)} L
               </span>
             </div>
-            <div className="p-2.5 rounded-2xl bg-[#1C1C1C] border border-[#282828]">
-              <span className="text-[9px] uppercase font-bold text-slate-400 block">Status</span>
-              <span className="text-sm font-extrabold font-mono text-cyan-400">
-                {percentage >= 100 ? 'Hydrated 🎯' : `${Math.round(currentLiters * 4)} / ${Math.round(targetLiters * 4)} Cups`}
+            <div className="p-2.5 rounded-2xl bg-[#1A1A1A] border border-[#262626]">
+              <span className="text-[10px] text-slate-400 block font-medium">Status</span>
+              <span className="text-xs font-semibold text-slate-300">
+                {Math.round(currentLiters / 0.25)} / {Math.round(targetLiters / 0.25)} Cups
               </span>
             </div>
           </div>
 
-          {/* Visual Progress Bar */}
+          {/* Horizontal Progress Mini Bar */}
           <div className="space-y-1">
-            <div className="w-full h-2 bg-[#222222] rounded-full overflow-hidden">
+            <div className="w-full bg-[#222222] rounded-full h-2 overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-cyan-500 to-sky-400 rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, percentage)}%` }}
@@ -442,68 +556,151 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
           </button>
         </div>
 
-        {/* Undo Button */}
-        {currentLiters > 0 && (
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              onClick={() => handleSubtractWater(0.25)}
-              className="text-[10px] text-slate-400 hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              <Minus className="w-3 h-3" />
-              <span>Undo last entry (-0.25 L)</span>
-            </button>
-          </div>
-        )}
+        {/* Fine Adjustment Steppers */}
+        <div className="flex items-center justify-between pt-1">
+          <button
+            type="button"
+            onClick={() => handleSubtractWater(0.25)}
+            disabled={currentLiters <= 0}
+            className="text-[10px] text-slate-500 hover:text-slate-300 disabled:opacity-30 disabled:hover:text-slate-500 flex items-center gap-1 transition-colors cursor-pointer"
+          >
+            <Minus className="w-3 h-3" />
+            <span>Undo last entry (-0.25 L)</span>
+          </button>
+
+          {/* Reminder Settings Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowSettingsPanel(!showSettingsPanel)}
+            className="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors cursor-pointer font-semibold"
+          >
+            <Bell className="w-3 h-3" />
+            <span>{showSettingsPanel ? 'Hide Reminder Setup' : 'Hydration Reminders'}</span>
+            {showSettingsPanel ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+        </div>
       </div>
 
-      {/* Relevant Hydration Recommendations Card */}
-      <div className="p-4 rounded-2xl bg-[#181818] border border-[#262626] space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="text-xs font-bold text-white uppercase tracking-wider">
-              Coach Brian's Hydration Blueprint
-            </span>
+      {/* Hydration Push & Subtle Toast Settings Panel */}
+      {showSettingsPanel && (
+        <div className="p-3.5 rounded-2xl bg-[#191919] border border-[#2C2C2C] space-y-3 animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-xs font-bold text-white">Daily Hydration Reminder System</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => triggerHydrationAlert('🔔 Kampala Hydration Check', 'Testing your hydration reminder toast & push alert.')}
+              className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[11px] font-bold border border-cyan-500/40 transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <Zap className="w-3 h-3 text-cyan-400" />
+              <span>Test Toast Now</span>
+            </button>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            {/* Push Notifications Toggle */}
+            <div className="p-2.5 rounded-xl bg-[#141414] border border-[#242424] flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-semibold text-slate-200 block">Web Push Alerts</span>
+                <span className="text-[9px] text-slate-400 block">
+                  {pushPermission === 'granted'
+                    ? 'Active in background'
+                    : pushPermission === 'denied'
+                    ? 'Blocked by browser'
+                    : 'Permission requested'}
+                </span>
+              </div>
+              {pushPermission === 'granted' ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Active
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleEnablePushNotifications}
+                  className="px-2 py-1 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-[10px] transition-colors cursor-pointer"
+                >
+                  Enable Push
+                </button>
+              )}
+            </div>
+
+            {/* Reminder Interval Selector */}
+            <div className="p-2.5 rounded-xl bg-[#141414] border border-[#242424] flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-semibold text-slate-200 block">Reminder Cadence</span>
+                <span className="text-[9px] text-slate-400 block">In-app subtle floating toast</span>
+              </div>
+              <select
+                value={reminderSettings.enabled ? reminderSettings.intervalMinutes : 0}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (val === 0) {
+                    setReminderSettings((prev) => ({ ...prev, enabled: false }));
+                    showInfo('Reminders Paused', 'Hydration reminder toasts have been paused.');
+                  } else {
+                    setReminderSettings((prev) => ({ ...prev, enabled: true, intervalMinutes: val }));
+                    showSuccess('Reminder Cadence Updated', `Reminders scheduled every ${val / 60} hours.`);
+                  }
+                }}
+                className="bg-[#202020] border border-[#333] text-slate-200 text-[11px] rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer"
+              >
+                <option value={90}>Every 1.5h</option>
+                <option value={120}>Every 2h (Rec)</option>
+                <option value={180}>Every 3h</option>
+                <option value={0}>Paused</option>
+              </select>
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-tight">
+            Reminders automatically pace your water intake across the day and alert you at 2:00 PM if intake drops below the Kampala 1.5L heat shield threshold.
+          </p>
+        </div>
+      )}
+
+      {/* Recommendations & Climate Advisory Accordion */}
+      <div className="pt-2 border-t border-[#222222] space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Coach Brian's Hydration Blueprint</span>
+          </span>
           <button
             type="button"
             onClick={() => setShowAllRecs(!showAllRecs)}
-            className="text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+            className="text-[10px] font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors cursor-pointer"
           >
             <span>{showAllRecs ? 'Show Less' : `All Recommendations (${recommendations.length})`}</span>
             {showAllRecs ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
         </div>
 
-        {/* Recommendations Grid / List */}
-        <div className="space-y-2">
-          {(showAllRecs ? recommendations : recommendations.slice(0, 1)).map((rec) => (
-            <div
-              key={rec.id}
-              className="p-3 rounded-xl bg-[#1E1E1E] border border-[#2A2A2A] flex items-start gap-2.5 text-xs"
-            >
-              <div className="w-6 h-6 rounded-lg bg-[#272727] flex items-center justify-center shrink-0 mt-0.5">
+        {/* Display Primary Top Recommendation */}
+        {recommendations.slice(0, showAllRecs ? recommendations.length : 1).map((rec) => (
+          <div
+            key={rec.id}
+            className="p-3 rounded-2xl bg-[#1A1A1A] border border-[#242424] space-y-1"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 {renderRecIcon(rec.iconType)}
+                <span className="text-xs font-bold text-white tracking-tight">{rec.title}</span>
               </div>
-              <div className="space-y-0.5 flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white text-[11px]">{rec.title}</span>
-                  <span className="text-[9px] uppercase font-semibold text-slate-400 px-1.5 py-0.2 rounded bg-[#272727]">
-                    {rec.tag}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed">{rec.text}</p>
-              </div>
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold px-1.5 py-0.5 rounded bg-white/5">
+                {rec.tag}
+              </span>
             </div>
-          ))}
-        </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed pl-5">
+              {rec.text}
+            </p>
+          </div>
+        ))}
 
-        {/* Kampala Climate Tip Footer */}
-        <div className="flex items-center gap-1.5 pt-1 text-[10px] text-slate-400">
-          <Info className="w-3 h-3 text-[#FF6A00] shrink-0" />
-          <span>Kampala daytime average 26°C with 70% humidity increases unnoticeable sweat evaporation. Target at least 1.5L before 2:00 PM.</span>
+        {/* Kampala Heat & Altitude Note */}
+        <div className="p-2.5 rounded-xl bg-cyan-950/20 border border-cyan-900/30 text-[10px] text-cyan-300/90 leading-tight">
+          Kampala daytime average 26°C with 70% humidity increases unnoticeable sweat evaporation. Target at least 1.5L before 2:00 PM.
         </div>
       </div>
     </div>

@@ -32,6 +32,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { formatKampalaDate, formatKampalaDateTime } from '../../utils/formatters';
+import { useToast } from '../../context/ToastContext';
 
 interface ClientDetailProps {
   clientId: string;
@@ -39,6 +40,7 @@ interface ClientDetailProps {
 }
 
 export const ClientDetail: React.FC<ClientDetailProps> = ({ clientId, onBack }) => {
+  const { showSuccess, showError } = useToast();
   const [data, setData] = useState<{
     overview: ClientOverview;
     workoutLogs: WorkoutLog[];
@@ -131,11 +133,12 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ clientId, onBack }) 
         body: JSON.stringify({ comment: text.trim() }),
       });
       if (res.ok) {
-        alert('Coach feedback saved successfully!');
+        showSuccess('Feedback Saved', 'Coach feedback saved successfully!');
         fetchDossier();
       }
     } catch (err) {
       console.error('Save comment failed:', err);
+      showError('Save Failed', 'Failed to save coach feedback.');
     }
   };
 
@@ -154,11 +157,12 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ clientId, onBack }) 
         body: JSON.stringify({ feedback: text.trim() }),
       });
       if (res.ok) {
-        alert('Check-in review saved!');
+        showSuccess('Review Saved', 'Check-in review saved!');
         fetchDossier();
       }
     } catch (err) {
       console.error('Save feedback failed:', err);
+      showError('Review Failed', 'Failed to save check-in review.');
     }
   };
 

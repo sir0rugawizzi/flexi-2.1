@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Download, Smartphone, X } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -7,6 +8,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export const PWAInstallButton: React.FC = () => {
+  const { showInfo } = useToast();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
@@ -54,7 +56,7 @@ export const PWAInstallButton: React.FC = () => {
     } else if (isIOS) {
       setShowIOSModal(true);
     } else {
-      alert('To install FlexiFit, tap your browser menu (⋮) and select "Add to Home screen" or "Install App".');
+      showInfo('App Installation', 'To install FlexiFit, tap your browser menu (⋮) and select "Add to Home screen" or "Install App".', 6000);
     }
   };
 
